@@ -1,0 +1,36 @@
+{
+  "name": "sonora-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sonora — Premium Discord Music Bot & Web Player",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n SERVER,WEB -c emerald,cyan \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:server": "npm run --workspace=@sonora/server dev",
+    "dev:web": "npm run --workspace=@sonora/web dev",
+    "build": "npm run --workspace=@sonora/shared build && npm run --workspace=@sonora/database build && npm run --workspace=@sonora/audio-engine build && npm run --workspace=@sonora/server build && npm run --workspace=@sonora/web build",
+    "start": "npm run --workspace=@sonora/server start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "npm run --workspaces --if-present typecheck",
+    "branding:generate": "node scripts/generate-branding-pngs.mjs",
+    "db:backup": "npm run --workspace=@sonora/database backup",
+    "db:restore": "npm run --workspace=@sonora/database restore",
+    "commands:register": "npm run --workspace=@sonora/server register-commands"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^10.0.6",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

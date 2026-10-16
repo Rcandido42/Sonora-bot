@@ -1,0 +1,1 @@
+export const DATABASE_PACKAGE_VERSION = '1.0.0';

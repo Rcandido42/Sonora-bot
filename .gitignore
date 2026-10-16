@@ -1,0 +1,47 @@
+# Dependências
+node_modules/
+.pnp
+.pnp.js
+
+# Compilação e builds
+dist/
+build/
+*.tsbuildinfo
+
+# Variáveis de ambiente e segredos (NUNCA publicar no Git)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+!.env.example
+
+# Base de dados SQLite e cópias de segurança
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+data/
+backups/
+
+# Binários locais geridos (ex: yt-dlp.exe)
+.bin/
+
+# Logs e diagnósticos
+logs/
+*.log
+npm-debug.log*
+
+# Testes e cobertura
+coverage/
+playwright-report/
+test-results/
+
+# Sistema Operativo e IDEs
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/

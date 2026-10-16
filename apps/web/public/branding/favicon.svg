@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none" role="img" aria-label="Sonora Favicon">
+  <rect x="0" y="0" width="32" height="32" rx="8" fill="#090A0C" />
+  <circle cx="11.5" cy="20.5" r="3.8" fill="#F8FAFC" />
+  <path d="M13.8 20.5V8.5C13.8 7.67157 14.4716 7 15.3 7H16" stroke="#F8FAFC" stroke-width="2.8" stroke-linecap="round" />
+  <path d="M18 10C20.8 11.4 22.3 13.8 22.3 16.8C22.3 19.8 20.8 22.2 18 23.6" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M22 7.2C25.5 9.2 27.5 12.6 27.5 16.8C27.5 21 25.5 24.4 22 26.4" stroke="#10B981" stroke-width="2.4" stroke-linecap="round" stroke-opacity="0.8" />
+  <path d="M6.2 13.5V18.5" stroke="#94A3B8" stroke-width="2.2" stroke-linecap="round" />
+</svg>
