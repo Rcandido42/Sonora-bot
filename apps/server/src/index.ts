@@ -7,6 +7,7 @@ import { SonoraBot } from './bot/sonora-bot.js';
 export * from './bot/commands.js';
 export * from './bot/embeds.js';
 export * from './bot/command-router.js';
+export * from './bot/real-playback-port.js';
 export * from './bot/sonora-bot.js';
 
 const __filename = fileURLToPath(import.meta.url);

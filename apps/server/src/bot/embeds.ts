@@ -1,4 +1,13 @@
-import { EmbedBuilder } from 'discord.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  ActionRowBuilder,
+  AttachmentBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder
+} from 'discord.js';
 import {
   SONORA_BRAND,
   formatDuration,
@@ -6,6 +15,12 @@ import {
   type PlayerStateSnapshot,
   type SupportedLocale
 } from '@sonora/shared';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fallbackCoverPath = path.resolve(
+  __dirname,
+  '../../../../apps/web/public/branding/cover-fallback-512.png'
+);
 
 export function createSonoraStatusEmbed(
   description: string,
@@ -29,6 +44,136 @@ export function createSonoraStatusEmbed(
   }
 
   return embed;
+}
+
+export function createSonoraNowPlayingPayload(
+  state: PlayerStateSnapshot,
+  locale: SupportedLocale = 'pt-PT'
+): {
+  embeds: [EmbedBuilder];
+  components: [ActionRowBuilder<ButtonBuilder>];
+  files: AttachmentBuilder[];
+} {
+  const isPt = locale === 'pt-PT';
+  const track = state.currentTrack;
+
+  if (!track) {
+    return {
+      embeds: [createSonoraStatusEmbed(t(locale, 'common.error.nothingPlaying'), 'idle')],
+      components: [new ActionRowBuilder<ButtonBuilder>()],
+      files: []
+    };
+  }
+
+  const isPaused = state.status === 'paused';
+  const statusLabel = isPaused
+    ? isPt
+      ? '⏸ Em Pausa'
+      : '⏸ Paused'
+    : isPt
+      ? '▶ A Reproduzir'
+      : '▶ Playing';
+
+  const loopLabelMap = {
+    off: isPt ? 'Desativado' : 'Off',
+    track: isPt ? 'Faixa Atual' : 'Track',
+    queue: isPt ? 'Toda a Fila' : 'Queue'
+  };
+
+  const sourceLabelMap = {
+    youtube: 'YouTube',
+    soundcloud: 'SoundCloud',
+    direct: isPt ? 'Áudio Direto' : 'Direct Audio'
+  };
+
+  const embed = new EmbedBuilder()
+    .setColor(SONORA_BRAND.colors.discordEmbedAccent)
+    .setAuthor({
+      name: `${SONORA_BRAND.upperName} • ${statusLabel}`
+    })
+    .setTitle(track.title)
+    .setURL(track.sourceUrl)
+    .setDescription(`**${track.artist}**`)
+    .addFields(
+      {
+        name: isPt ? 'Duração' : 'Duration',
+        value: `\`${formatDuration(track.durationMs)}\``,
+        inline: true
+      },
+      {
+        name: isPt ? 'Volume' : 'Volume',
+        value: `\`${state.volume}%\``,
+        inline: true
+      },
+      {
+        name: isPt ? 'Repetição' : 'Repeat',
+        value: `\`${loopLabelMap[state.loopMode]}\``,
+        inline: true
+      },
+      {
+        name: isPt ? 'Fonte' : 'Source',
+        value: track.matchedFromSpotifyUrl
+          ? `Spotify → ${sourceLabelMap[track.source]}`
+          : sourceLabelMap[track.source],
+        inline: true
+      },
+      {
+        name: isPt ? 'Na Fila' : 'In Queue',
+        value: `\`${state.queue.length}\``,
+        inline: true
+      },
+      {
+        name: isPt ? 'Pedido por' : 'Requested by',
+        value: track.requestedBy
+          ? track.requestedBy.displayName ?? track.requestedBy.username
+          : isPt
+            ? 'Painel Web Sonora'
+            : 'Sonora Web Player',
+        inline: true
+      }
+    )
+    .setFooter({
+      text: `${SONORA_BRAND.upperName} • ${SONORA_BRAND.tagline[locale]}`
+    });
+
+  const files: AttachmentBuilder[] = [];
+  if (track.artworkUrl) {
+    embed.setThumbnail(track.artworkUrl);
+  } else if (fs.existsSync(fallbackCoverPath)) {
+    const attachmentName = SONORA_BRAND.assets.discordCoverAttachmentName;
+    files.push(new AttachmentBuilder(fallbackCoverPath, { name: attachmentName }));
+    embed.setThumbnail(`attachment://${attachmentName}`);
+  }
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('sonora:toggle_pause')
+      .setLabel(isPaused ? (isPt ? 'Retomar' : 'Resume') : isPt ? 'Pausa' : 'Pause')
+      .setStyle(isPaused ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('sonora:skip')
+      .setLabel(isPt ? 'Avançar' : 'Skip')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('sonora:stop')
+      .setLabel(isPt ? 'Parar' : 'Stop')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('sonora:loop')
+      .setLabel(`${isPt ? 'Loop' : 'Loop'}: ${loopLabelMap[state.loopMode]}`)
+      .setStyle(state.loopMode === 'off' ? ButtonStyle.Secondary : ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('sonora:shuffle')
+      .setLabel(isPt ? 'Aleatório' : 'Shuffle')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(state.queue.length < 2)
+  );
+
+  return {
+    embeds: [embed],
+    components: [row],
+    files
+  };
 }
 
 export function createSonoraHelpEmbed(locale: SupportedLocale): EmbedBuilder {
@@ -116,7 +261,9 @@ export function createSonoraQueueEmbed(
 
   const embed = new EmbedBuilder()
     .setColor(SONORA_BRAND.colors.discordEmbedAccent)
-    .setTitle(isPt ? `♪ Fila de Reprodução — ${SONORA_BRAND.name}` : `♪ Playback Queue — ${SONORA_BRAND.name}`);
+    .setTitle(
+      isPt ? `♪ Fila de Reprodução — ${SONORA_BRAND.name}` : `♪ Playback Queue — ${SONORA_BRAND.name}`
+    );
 
   const currentLine = state.currentTrack
     ? `**${state.currentTrack.title}** — ${state.currentTrack.artist} \`[${formatDuration(state.currentTrack.durationMs)}]\``
@@ -130,7 +277,9 @@ export function createSonoraQueueEmbed(
           .map(
             (track, i) =>
               `\`${startIdx + i + 1}.\` **${track.title}** — ${track.artist} \`[${formatDuration(track.durationMs)}]\`${
-                track.requestedBy ? ` • _${track.requestedBy.displayName ?? track.requestedBy.username}_` : ''
+                track.requestedBy
+                  ? ` • _${track.requestedBy.displayName ?? track.requestedBy.username}_`
+                  : ''
               }`
           )
           .join('\n')

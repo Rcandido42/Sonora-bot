@@ -1,5 +1,6 @@
 import {
   PermissionFlagsBits,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type GuildMember,
   type VoiceBasedChannel
@@ -15,6 +16,7 @@ import {
 } from '@sonora/shared';
 import {
   createSonoraHelpEmbed,
+  createSonoraNowPlayingPayload,
   createSonoraQueueEmbed,
   createSonoraStatusEmbed
 } from './embeds.js';
@@ -29,7 +31,10 @@ export interface BotPlaybackPort {
   getState(guildId: string): PlayerStateSnapshot;
   getGuildLocale(guildId: string): SupportedLocale;
   setGuildLocale(guildId: string, locale: SupportedLocale): void;
-  hasDjPermission(guildId: string, member: { id: string; isAdmin: boolean; roleIds: string[]; voiceChannelUserCount?: number }): boolean;
+  hasDjPermission(
+    guildId: string,
+    member: { id: string; isAdmin: boolean; roleIds: string[]; voiceChannelUserCount?: number }
+  ): boolean;
   play(params: {
     guildId: string;
     query: string;
@@ -43,7 +48,10 @@ export interface BotPlaybackPort {
   stop(guildId: string): PlayerStateSnapshot;
   leave(guildId: string): PlayerStateSnapshot;
   setVolume(guildId: string, volume: number): PlayerStateSnapshot;
-  removeTrack(guildId: string, positionOneBased: number): { removed: Track; state: PlayerStateSnapshot };
+  removeTrack(
+    guildId: string,
+    positionOneBased: number
+  ): { removed: Track; state: PlayerStateSnapshot };
   clearQueue(guildId: string): { clearedCount: number; state: PlayerStateSnapshot };
   shuffleQueue(guildId: string): { shuffledCount: number; state: PlayerStateSnapshot };
   setLoopMode(guildId: string, mode: LoopMode): PlayerStateSnapshot;
@@ -115,7 +123,9 @@ export class InMemoryFallbackPlaybackPort implements BotPlaybackPort {
       durationMs: 180_000,
       artworkUrl: null,
       source: 'youtube',
-      sourceUrl: params.query.startsWith('http') ? params.query : `https://www.youtube.com/results?search_query=${encodeURIComponent(params.query)}`,
+      sourceUrl: params.query.startsWith('http')
+        ? params.query
+        : `https://www.youtube.com/results?search_query=${encodeURIComponent(params.query)}`,
       requestedBy: params.requester,
       addedAt: new Date().toISOString()
     };
@@ -150,7 +160,11 @@ export class InMemoryFallbackPlaybackPort implements BotPlaybackPort {
     return state;
   }
 
-  public skip(guildId: string): { skipped: Track | null; next: Track | null; state: PlayerStateSnapshot } {
+  public skip(guildId: string): {
+    skipped: Track | null;
+    next: Track | null;
+    state: PlayerStateSnapshot;
+  } {
     const state = this.getState(guildId);
     const skipped = state.currentTrack;
     const next = state.queue.shift() ?? null;
@@ -187,7 +201,10 @@ export class InMemoryFallbackPlaybackPort implements BotPlaybackPort {
     return state;
   }
 
-  public removeTrack(guildId: string, positionOneBased: number): { removed: Track; state: PlayerStateSnapshot } {
+  public removeTrack(
+    guildId: string,
+    positionOneBased: number
+  ): { removed: Track; state: PlayerStateSnapshot } {
     const state = this.getState(guildId);
     const idx = positionOneBased - 1;
     if (idx < 0 || idx >= state.queue.length) {
@@ -248,7 +265,9 @@ export class SonoraCommandRouter {
     this.playback = playback;
   }
 
-  private extractMemberContext(interaction: ChatInputCommandInteraction) {
+  private extractMemberContext(
+    interaction: ChatInputCommandInteraction | ButtonInteraction
+  ) {
     const member = interaction.member as GuildMember | null;
     const isAdmin = Boolean(
       interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
@@ -270,7 +289,7 @@ export class SonoraCommandRouter {
   }
 
   private ensureVoicePreconditions(
-    interaction: ChatInputCommandInteraction,
+    interaction: ChatInputCommandInteraction | ButtonInteraction,
     locale: SupportedLocale,
     requireBotInSameChannel = true
   ): VoiceBasedChannel | null {
@@ -291,6 +310,84 @@ export class SonoraCommandRouter {
     }
 
     return voiceChannel;
+  }
+
+  public async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
+    const guildId = interaction.guildId;
+    if (!guildId || !interaction.customId.startsWith('sonora:')) return;
+
+    const locale = this.playback.getGuildLocale(guildId);
+    try {
+      const voiceChannel = this.ensureVoicePreconditions(interaction, locale, true);
+      if (!voiceChannel) {
+        await interaction.reply({
+          embeds: [createSonoraStatusEmbed(t(locale, 'common.error.voiceRequired'), 'error')],
+          ephemeral: true
+        });
+        return;
+      }
+
+      const state = this.playback.getState(guildId);
+      const memberCtx = this.extractMemberContext(interaction);
+      const isRequester = state.currentTrack?.requestedBy?.id === interaction.user.id;
+      const canControl =
+        isRequester ||
+        this.playback.hasDjPermission(guildId, { id: interaction.user.id, ...memberCtx });
+
+      if (!canControl) {
+        await interaction.reply({
+          embeds: [createSonoraStatusEmbed(t(locale, 'common.error.djRequired'), 'error')],
+          ephemeral: true
+        });
+        return;
+      }
+
+      switch (interaction.customId) {
+        case 'sonora:toggle_pause': {
+          const nextState =
+            state.status === 'paused'
+              ? this.playback.resume(guildId)
+              : this.playback.pause(guildId);
+          await interaction.update(createSonoraNowPlayingPayload(nextState, locale));
+          return;
+        }
+        case 'sonora:skip': {
+          const { state: nextState } = this.playback.skip(guildId);
+          await interaction.update(createSonoraNowPlayingPayload(nextState, locale));
+          return;
+        }
+        case 'sonora:stop': {
+          this.playback.stop(guildId);
+          await interaction.update({
+            embeds: [createSonoraStatusEmbed(t(locale, 'player.stopped'), 'accent')],
+            components: [],
+            files: []
+          });
+          return;
+        }
+        case 'sonora:loop': {
+          const cycle: Record<LoopMode, LoopMode> = {
+            off: 'track',
+            track: 'queue',
+            queue: 'off'
+          };
+          const nextState = this.playback.setLoopMode(guildId, cycle[state.loopMode]);
+          await interaction.update(createSonoraNowPlayingPayload(nextState, locale));
+          return;
+        }
+        case 'sonora:shuffle': {
+          const { state: nextState } = this.playback.shuffleQueue(guildId);
+          await interaction.update(createSonoraNowPlayingPayload(nextState, locale));
+          return;
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t(locale, 'common.error.unexpected');
+      await interaction.reply({
+        embeds: [createSonoraStatusEmbed(msg, 'error')],
+        ephemeral: true
+      });
+    }
   }
 
   public async handleChatInputCommand(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -372,18 +469,21 @@ export class SonoraCommandRouter {
             requester
           });
 
-          const messageKey = result.startedImmediately ? 'player.nowPlaying' : 'player.trackAdded';
-          await interaction.editReply({
-            embeds: [
-              createSonoraStatusEmbed(
-                t(locale, messageKey, {
-                  title: result.track.title,
-                  artist: result.track.artist
-                }),
-                'accent'
-              )
-            ]
-          });
+          if (result.startedImmediately) {
+            await interaction.editReply(createSonoraNowPlayingPayload(result.state, locale));
+          } else {
+            await interaction.editReply({
+              embeds: [
+                createSonoraStatusEmbed(
+                  t(locale, 'player.trackAdded', {
+                    title: result.track.title,
+                    artist: result.track.artist
+                  }),
+                  'accent'
+                )
+              ]
+            });
+          }
           return;
         }
 
@@ -468,7 +568,10 @@ export class SonoraCommandRouter {
           }
           const memberCtx = this.extractMemberContext(interaction);
           const isRequester = state.currentTrack.requestedBy?.id === interaction.user.id;
-          if (!isRequester && !this.playback.hasDjPermission(guildId, { id: interaction.user.id, ...memberCtx })) {
+          if (
+            !isRequester &&
+            !this.playback.hasDjPermission(guildId, { id: interaction.user.id, ...memberCtx })
+          ) {
             await interaction.reply({
               embeds: [createSonoraStatusEmbed(t(locale, 'common.error.djRequired'), 'error')],
               ephemeral: true
@@ -579,17 +682,7 @@ export class SonoraCommandRouter {
             });
             return;
           }
-          await interaction.reply({
-            embeds: [
-              createSonoraStatusEmbed(
-                t(locale, 'player.nowPlaying', {
-                  title: state.currentTrack.title,
-                  artist: state.currentTrack.artist
-                }),
-                'accent'
-              )
-            ]
-          });
+          await interaction.reply(createSonoraNowPlayingPayload(state, locale));
           return;
         }
 
@@ -636,7 +729,10 @@ export class SonoraCommandRouter {
           const targetTrack = state.queue[position - 1];
           const memberCtx = this.extractMemberContext(interaction);
           const isRequester = targetTrack?.requestedBy?.id === interaction.user.id;
-          if (!isRequester && !this.playback.hasDjPermission(guildId, { id: interaction.user.id, ...memberCtx })) {
+          if (
+            !isRequester &&
+            !this.playback.hasDjPermission(guildId, { id: interaction.user.id, ...memberCtx })
+          ) {
             await interaction.reply({
               embeds: [createSonoraStatusEmbed(t(locale, 'common.error.djRequired'), 'error')],
               ephemeral: true

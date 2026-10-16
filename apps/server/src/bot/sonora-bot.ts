@@ -9,20 +9,20 @@ import {
 import { logger, SONORA_BRAND, type AppConfig } from '@sonora/shared';
 import { buildSonoraSlashCommands } from './commands.js';
 import {
-  InMemoryFallbackPlaybackPort,
   SonoraCommandRouter,
   type BotPlaybackPort
 } from './command-router.js';
+import { RealAudioPlaybackPort } from './real-playback-port.js';
 
 export class SonoraBot {
   public readonly client: Client;
   public readonly router: SonoraCommandRouter;
+  public readonly playback: BotPlaybackPort;
   private readonly config: AppConfig;
-  private readonly playback: BotPlaybackPort;
 
   constructor(config: AppConfig, playback?: BotPlaybackPort) {
     this.config = config;
-    this.playback = playback ?? new InMemoryFallbackPlaybackPort(config.DEFAULT_LANGUAGE);
+    this.playback = playback ?? new RealAudioPlaybackPort(config);
     this.router = new SonoraCommandRouter(this.playback);
 
     this.client = new Client({
@@ -57,8 +57,11 @@ export class SonoraBot {
     });
 
     this.client.on(Events.InteractionCreate, async (interaction) => {
-      if (!interaction.isChatInputCommand()) return;
-      await this.router.handleChatInputCommand(interaction);
+      if (interaction.isChatInputCommand()) {
+        await this.router.handleChatInputCommand(interaction);
+      } else if (interaction.isButton()) {
+        await this.router.handleButtonInteraction(interaction);
+      }
     });
 
     this.client.on(Events.Error, (err) => {
