@@ -121,5 +121,8 @@ export class SonoraBot {
   public async stop(): Promise<void> {
     logger.info(`[${SONORA_BRAND.name}] A encerrar ligação do bot Discord...`);
     await this.client.destroy();
+    if (this.playback instanceof RealAudioPlaybackPort) {
+      this.playback.database.close();
+    }
   }
 }
