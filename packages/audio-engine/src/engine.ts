@@ -24,6 +24,7 @@ import {
 import type { AudioSourceAdapter, PcmAudioStreamHandle } from './adapters/types.js';
 import { DirectAudioAdapter } from './adapters/direct-audio-adapter.js';
 import { SoundCloudAdapter } from './adapters/soundcloud-adapter.js';
+import { SpotifyMetadataAdapter } from './adapters/spotify-adapter.js';
 import { YouTubeAdapter } from './adapters/youtube-adapter.js';
 
 export interface VoiceChannelTarget {
@@ -39,6 +40,8 @@ export interface SonoraAudioEngineOptions {
   allowInsecureDirectHttp?: boolean;
   ffmpegPath?: string;
   ytDlpPath?: string;
+  spotifyClientId?: string;
+  spotifyClientSecret?: string;
   adapters?: AudioSourceAdapter[];
   connectToVoiceFn?: (target: VoiceChannelTarget) => Promise<VoiceConnection | null>;
 }
@@ -70,6 +73,11 @@ export class SonoraAudioEngine extends EventEmitter {
     this.defaultVolume = options.defaultVolume ?? 80;
     this.connectToVoiceFn = options.connectToVoiceFn;
 
+    const youtubeAdapter = new YouTubeAdapter({
+      ffmpegPath: options.ffmpegPath,
+      ytDlpPath: options.ytDlpPath
+    });
+
     this.adapters = options.adapters ?? [
       new DirectAudioAdapter({
         allowHttp: options.allowInsecureDirectHttp ?? false,
@@ -79,10 +87,12 @@ export class SonoraAudioEngine extends EventEmitter {
         ffmpegPath: options.ffmpegPath,
         ytDlpPath: options.ytDlpPath
       }),
-      new YouTubeAdapter({
-        ffmpegPath: options.ffmpegPath,
-        ytDlpPath: options.ytDlpPath
-      })
+      new SpotifyMetadataAdapter({
+        clientId: options.spotifyClientId,
+        clientSecret: options.spotifyClientSecret,
+        fallbackSearchAdapter: youtubeAdapter
+      }),
+      youtubeAdapter
     ];
   }
 

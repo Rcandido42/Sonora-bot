@@ -38,7 +38,9 @@ export class RealAudioPlaybackPort implements BotPlaybackPort {
         defaultLocale: config.DEFAULT_LANGUAGE,
         allowInsecureDirectHttp: config.ALLOW_INSECURE_DIRECT_AUDIO_HTTP,
         ffmpegPath: config.FFMPEG_PATH,
-        ytDlpPath: config.YTDLP_PATH
+        ytDlpPath: config.YTDLP_PATH,
+        spotifyClientId: config.SPOTIFY_CLIENT_ID,
+        spotifyClientSecret: config.SPOTIFY_CLIENT_SECRET
       });
 
     this.lyricsService =
